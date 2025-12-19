@@ -3,35 +3,36 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Modern Snake | SnowMan YT</title>
+<title>Smart Snake | SnowMan YT</title>
 
 <style>
 body{
   margin:0;
-  background:radial-gradient(circle,#0a0f1f,#000);
-  font-family:system-ui,monospace;
+  background:linear-gradient(135deg,#1a2a6c,#b21f1f,#fdbb2d);
+  font-family:system-ui;
   display:flex;
   justify-content:center;
   align-items:center;
   min-height:100vh;
 }
 .game{
-  background:#0b1220;
-  border-radius:18px;
-  padding:18px;
-  box-shadow:0 0 40px rgba(0,255,255,.4);
-  width:320px;
+  background:#0b1020;
+  border-radius:20px;
+  padding:16px;
+  width:330px;
+  box-shadow:0 0 40px rgba(0,0,0,.6);
 }
-.header{
+.top{
   display:flex;
   justify-content:space-between;
-  color:#00eaff;
+  align-items:center;
+  color:#fff;
   font-weight:bold;
   margin-bottom:8px;
 }
 canvas{
-  background:#020617;
-  border-radius:14px;
+  background:radial-gradient(circle,#050b1f,#000);
+  border-radius:16px;
   display:block;
   margin:auto;
   border:2px solid #00eaff;
@@ -43,29 +44,32 @@ canvas{
   justify-content:center;
   margin-top:12px;
 }
-.controls button{
-  background:#00eaff;
+.controls button,
+.full{
+  background:linear-gradient(135deg,#00eaff,#6fff9f);
   border:none;
-  border-radius:10px;
-  font-size:20px;
+  border-radius:12px;
+  font-size:18px;
   padding:12px;
+  cursor:pointer;
 }
-.controls button:active{transform:scale(.92);}
+.controls button:active,
+.full:active{transform:scale(.92);}
 .credit{
   text-align:center;
-  margin-top:10px;
   font-size:12px;
-  color:#88ffff;
+  margin-top:8px;
+  color:#cfffff;
 }
 </style>
 </head>
 
 <body>
 
-<div class="game">
-  <div class="header">
+<div class="game" id="gameBox">
+  <div class="top">
     <div>Score: <span id="score">0</span></div>
-    <div>🐍</div>
+    <button class="full" onclick="fullscreen()">⛶</button>
   </div>
 
   <canvas id="game" width="280" height="280"></canvas>
@@ -75,7 +79,7 @@ canvas{
     <button onclick="setDir(0,-1)">⬆</button>
     <div></div>
     <button onclick="setDir(-1,0)">⬅</button>
-    <button onclick="restart()">⟳</button>
+    <button onclick="reset()">⟳</button>
     <button onclick="setDir(1,0)">➡</button>
     <div></div>
     <button onclick="setDir(0,1)">⬇</button>
@@ -89,44 +93,39 @@ canvas{
 const canvas=document.getElementById("game");
 const ctx=canvas.getContext("2d");
 
-const TILE=20, SIZE=14;
-const SPEED=6;
-
+const GRID=20, SIZE=14, SPEED=6;
 let snake,food,dir,nextDir,score;
 let last=0,acc=0;
 
 const scoreEl=document.getElementById("score");
 
-// Sound
-const audio=new AudioContext();
+// SOUND
+const audio=new (window.AudioContext||window.webkitAudioContext)();
 function beep(f,d){
   const o=audio.createOscillator(),g=audio.createGain();
   o.frequency.value=f;
   o.connect(g); g.connect(audio.destination);
   o.start();
-  g.gain.exponentialRampToValueAtTime(0.001,audio.currentTime+d);
+  g.gain.exponentialRampToValueAtTime(.001,audio.currentTime+d);
   o.stop(audio.currentTime+d);
 }
 
 function reset(){
   snake=[{x:10,y:10},{x:9,y:10},{x:8,y:10}];
-  dir={x:1,y:0};
-  nextDir={x:1,y:0};
+  dir={x:1,y:0}; nextDir={x:1,y:0};
   food=spawn();
   score=0;
   scoreEl.textContent=0;
 }
+
 function spawn(){
-  return {
-    x:Math.floor(Math.random()*TILE),
-    y:Math.floor(Math.random()*TILE)
-  };
+  return {x:Math.floor(Math.random()*GRID),y:Math.floor(Math.random()*GRID)};
 }
 
 function setDir(x,y){
   if(dir.x+x===0 && dir.y+y===0) return;
   nextDir={x,y};
-  beep(600,.02);
+  beep(500,.02);
 }
 
 document.addEventListener("keydown",e=>{
@@ -138,73 +137,79 @@ document.addEventListener("keydown",e=>{
 
 function update(){
   dir=nextDir;
-  const head={
-    x:snake[0].x+dir.x,
-    y:snake[0].y+dir.y
-  };
+  const h={x:snake[0].x+dir.x,y:snake[0].y+dir.y};
 
   if(
-    head.x<0||head.y<0||
-    head.x>=TILE||head.y>=TILE||
-    snake.some(s=>s.x===head.x&&s.y===head.y)
+    h.x<0||h.y<0||h.x>=GRID||h.y>=GRID||
+    snake.some(s=>s.x===h.x&&s.y===h.y)
   ){
     beep(120,.4);
     alert("Game Over! Score: "+score);
-    reset();
-    return;
+    reset(); return;
   }
 
-  snake.unshift(head);
+  snake.unshift(h);
 
-  if(head.x===food.x&&head.y===food.y){
-    score++;
-    scoreEl.textContent=score;
-    food=spawn();
-    beep(900,.08);
-  }else{
-    snake.pop();
-  }
+  if(h.x===food.x&&h.y===food.y){
+    score++; scoreEl.textContent=score;
+    food=spawn(); beep(900,.08);
+  }else snake.pop();
 }
 
 function draw(alpha){
-  ctx.fillStyle="#020617";
-  ctx.fillRect(0,0,canvas.width,canvas.height);
+  ctx.clearRect(0,0,canvas.width,canvas.height);
 
-  // food
-  ctx.fillStyle="#ff2d55";
-  ctx.shadowBlur=12;
+  // FOOD
+  ctx.fillStyle="hsl(0,100%,60%)";
+  ctx.shadowBlur=15;
   ctx.shadowColor="#ff2d55";
   ctx.fillRect(food.x*SIZE,food.y*SIZE,SIZE,SIZE);
 
-  // snake smooth
+  // SNAKE BODY
   ctx.shadowBlur=12;
-  ctx.shadowColor="#00eaff";
-  ctx.fillStyle="#00eaff";
-
   snake.forEach((p,i)=>{
+    ctx.fillStyle=i==0?"#00eaff":`hsl(${120+i*5},80%,55%)`;
     let x=p.x,y=p.y;
-    if(i===0){
+    if(i==0){
       x-=dir.x*(1-alpha);
       y-=dir.y*(1-alpha);
     }
     ctx.fillRect(x*SIZE,y*SIZE,SIZE,SIZE);
   });
+
+  // HEAD ROTATION (EYES)
+  const head=snake[0];
+  const cx=(head.x+0.5)*SIZE;
+  const cy=(head.y+0.5)*SIZE;
+  ctx.save();
+  ctx.translate(cx,cy);
+  ctx.rotate(Math.atan2(dir.y,dir.x));
+  ctx.fillStyle="#000";
+  ctx.beginPath();
+  ctx.arc(3,-3,2,0,Math.PI*2);
+  ctx.arc(3,3,2,0,Math.PI*2);
+  ctx.fill();
+  ctx.restore();
+
   ctx.shadowBlur=0;
 }
 
-function loop(ts){
-  if(!last) last=ts;
-  const dt=(ts-last)/1000;
-  last=ts;
-  acc+=dt;
+function loop(t){
+  if(!last) last=t;
+  acc+=(t-last)/1000;
+  last=t;
 
   while(acc>1/SPEED){
     update();
     acc-=1/SPEED;
   }
-
   draw(acc*SPEED);
   requestAnimationFrame(loop);
+}
+
+function fullscreen(){
+  const g=document.getElementById("gameBox");
+  if(g.requestFullscreen) g.requestFullscreen();
 }
 
 reset();
