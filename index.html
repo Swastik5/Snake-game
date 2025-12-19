@@ -3,178 +3,212 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Nokia Snake Game | SnowMan YT</title>
+<title>Modern Snake | SnowMan YT</title>
 
 <style>
 body{
   margin:0;
-  background:#000;
-  font-family:monospace;
+  background:radial-gradient(circle,#0a0f1f,#000);
+  font-family:system-ui,monospace;
   display:flex;
   justify-content:center;
   align-items:center;
   min-height:100vh;
 }
-.game-box{
-  background:#9bbc0f;
-  padding:15px;
-  border-radius:12px;
-  box-shadow:0 0 20px #0f0;
-  width:280px;
+.game{
+  background:#0b1220;
+  border-radius:18px;
+  padding:18px;
+  box-shadow:0 0 40px rgba(0,255,255,.4);
+  width:320px;
+}
+.header{
+  display:flex;
+  justify-content:space-between;
+  color:#00eaff;
+  font-weight:bold;
+  margin-bottom:8px;
 }
 canvas{
-  background:#8bac0f;
-  border:4px solid #0f380f;
+  background:#020617;
+  border-radius:14px;
   display:block;
   margin:auto;
-}
-.score{
-  text-align:center;
-  color:#0f380f;
-  margin-bottom:6px;
-  font-weight:bold;
-}
-.credit{
-  text-align:center;
-  font-size:11px;
-  color:#0f380f;
-  margin-top:6px;
-  font-weight:bold;
+  border:2px solid #00eaff;
 }
 .controls{
   display:grid;
-  grid-template-columns:60px 60px 60px;
-  gap:6px;
+  grid-template-columns:70px 70px 70px;
+  gap:8px;
   justify-content:center;
-  margin-top:10px;
+  margin-top:12px;
 }
 .controls button{
-  background:#0f380f;
-  color:#9bbc0f;
+  background:#00eaff;
   border:none;
-  border-radius:6px;
-  font-size:18px;
-  padding:10px;
-  cursor:pointer;
+  border-radius:10px;
+  font-size:20px;
+  padding:12px;
 }
-.controls button:active{
-  transform:scale(0.95);
+.controls button:active{transform:scale(.92);}
+.credit{
+  text-align:center;
+  margin-top:10px;
+  font-size:12px;
+  color:#88ffff;
 }
 </style>
 </head>
 
 <body>
 
-<div class="game-box">
-  <div class="score">Score: <span id="score">0</span></div>
+<div class="game">
+  <div class="header">
+    <div>Score: <span id="score">0</span></div>
+    <div>🐍</div>
+  </div>
 
-  <canvas id="game" width="240" height="240"></canvas>
+  <canvas id="game" width="280" height="280"></canvas>
 
-  <!-- Mobile Controls -->
   <div class="controls">
     <div></div>
-    <button onclick="setDir(0,-1)">▲</button>
+    <button onclick="setDir(0,-1)">⬆</button>
     <div></div>
-    <button onclick="setDir(-1,0)">◀</button>
+    <button onclick="setDir(-1,0)">⬅</button>
     <button onclick="restart()">⟳</button>
-    <button onclick="setDir(1,0)">▶</button>
+    <button onclick="setDir(1,0)">➡</button>
     <div></div>
-    <button onclick="setDir(0,1)">▼</button>
+    <button onclick="setDir(0,1)">⬇</button>
     <div></div>
   </div>
 
-  <!-- CREDIT -->
-  <div class="credit">
-    Game developed by @SnowMan YT
-  </div>
+  <div class="credit">Game developed by @SnowMan YT</div>
 </div>
 
 <script>
-const canvas = document.getElementById("game");
-const ctx = canvas.getContext("2d");
+const canvas=document.getElementById("game");
+const ctx=canvas.getContext("2d");
 
-const grid = 12;
-const tiles = 20;
+const TILE=20, SIZE=14;
+const SPEED=6;
 
-let snake, food, dx, dy, score, loop;
+let snake,food,dir,nextDir,score;
+let last=0,acc=0;
 
-function init(){
-  snake = [{x:10,y:10}];
-  dx = 1; dy = 0;
-  food = spawnFood();
-  score = 0;
-  document.getElementById("score").textContent = score;
+const scoreEl=document.getElementById("score");
+
+// Sound
+const audio=new AudioContext();
+function beep(f,d){
+  const o=audio.createOscillator(),g=audio.createGain();
+  o.frequency.value=f;
+  o.connect(g); g.connect(audio.destination);
+  o.start();
+  g.gain.exponentialRampToValueAtTime(0.001,audio.currentTime+d);
+  o.stop(audio.currentTime+d);
 }
 
-function spawnFood(){
+function reset(){
+  snake=[{x:10,y:10},{x:9,y:10},{x:8,y:10}];
+  dir={x:1,y:0};
+  nextDir={x:1,y:0};
+  food=spawn();
+  score=0;
+  scoreEl.textContent=0;
+}
+function spawn(){
   return {
-    x: Math.floor(Math.random()*tiles),
-    y: Math.floor(Math.random()*tiles)
+    x:Math.floor(Math.random()*TILE),
+    y:Math.floor(Math.random()*TILE)
   };
 }
 
 function setDir(x,y){
-  if(dx + x === 0 && dy + y === 0) return;
-  dx = x; dy = y;
+  if(dir.x+x===0 && dir.y+y===0) return;
+  nextDir={x,y};
+  beep(600,.02);
 }
 
-document.addEventListener("keydown", e=>{
-  if(e.key==="ArrowUp") setDir(0,-1);
-  if(e.key==="ArrowDown") setDir(0,1);
-  if(e.key==="ArrowLeft") setDir(-1,0);
-  if(e.key==="ArrowRight") setDir(1,0);
+document.addEventListener("keydown",e=>{
+  if(e.key==="ArrowUp")setDir(0,-1);
+  if(e.key==="ArrowDown")setDir(0,1);
+  if(e.key==="ArrowLeft")setDir(-1,0);
+  if(e.key==="ArrowRight")setDir(1,0);
 });
 
 function update(){
-  const head = {
-    x: snake[0].x + dx,
-    y: snake[0].y + dy
+  dir=nextDir;
+  const head={
+    x:snake[0].x+dir.x,
+    y:snake[0].y+dir.y
   };
 
   if(
-    head.x < 0 || head.y < 0 ||
-    head.x >= tiles || head.y >= tiles ||
-    snake.some(s => s.x === head.x && s.y === head.y)
+    head.x<0||head.y<0||
+    head.x>=TILE||head.y>=TILE||
+    snake.some(s=>s.x===head.x&&s.y===head.y)
   ){
-    alert("Game Over! Score: " + score);
-    restart();
+    beep(120,.4);
+    alert("Game Over! Score: "+score);
+    reset();
     return;
   }
 
   snake.unshift(head);
 
-  if(head.x === food.x && head.y === food.y){
+  if(head.x===food.x&&head.y===food.y){
     score++;
-    document.getElementById("score").textContent = score;
-    food = spawnFood();
+    scoreEl.textContent=score;
+    food=spawn();
+    beep(900,.08);
   }else{
     snake.pop();
   }
-
-  draw();
 }
 
-function draw(){
-  ctx.fillStyle="#8bac0f";
+function draw(alpha){
+  ctx.fillStyle="#020617";
   ctx.fillRect(0,0,canvas.width,canvas.height);
 
-  ctx.fillStyle="#306230";
-  snake.forEach(p=>{
-    ctx.fillRect(p.x*grid,p.y*grid,grid,grid);
+  // food
+  ctx.fillStyle="#ff2d55";
+  ctx.shadowBlur=12;
+  ctx.shadowColor="#ff2d55";
+  ctx.fillRect(food.x*SIZE,food.y*SIZE,SIZE,SIZE);
+
+  // snake smooth
+  ctx.shadowBlur=12;
+  ctx.shadowColor="#00eaff";
+  ctx.fillStyle="#00eaff";
+
+  snake.forEach((p,i)=>{
+    let x=p.x,y=p.y;
+    if(i===0){
+      x-=dir.x*(1-alpha);
+      y-=dir.y*(1-alpha);
+    }
+    ctx.fillRect(x*SIZE,y*SIZE,SIZE,SIZE);
   });
-
-  ctx.fillStyle="#0f380f";
-  ctx.fillRect(food.x*grid,food.y*grid,grid,grid);
+  ctx.shadowBlur=0;
 }
 
-function restart(){
-  clearInterval(loop);
-  init();
-  loop = setInterval(update,120);
+function loop(ts){
+  if(!last) last=ts;
+  const dt=(ts-last)/1000;
+  last=ts;
+  acc+=dt;
+
+  while(acc>1/SPEED){
+    update();
+    acc-=1/SPEED;
+  }
+
+  draw(acc*SPEED);
+  requestAnimationFrame(loop);
 }
 
-init();
-loop = setInterval(update,120);
+reset();
+requestAnimationFrame(loop);
 </script>
 
 </body>
