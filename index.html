@@ -8,265 +8,239 @@
 <style>
 html,body{
   margin:0;
-  width:100%;
-  height:100%;
-  background:#050b1f;
+  padding:0;
   overflow:hidden;
+  background:#050b1a;
   font-family:system-ui;
 }
-canvas{display:block}
-
-#ui{
-  position:fixed;
-  top:10px;
-  left:50%;
-  transform:translateX(-50%);
-  color:#00eaff;
-  font-weight:bold;
-  font-size:18px;
+canvas{
+  display:block;
 }
-#sound{
-  position:fixed;
-  top:10px;
-  right:15px;
-  font-size:22px;
-  cursor:pointer;
-  color:#00eaff;
-}
-#credit{
+#footer{
   position:fixed;
   bottom:10px;
-  left:50%;
-  transform:translateX(-50%);
-  color:#6ff;
+  width:100%;
+  text-align:center;
+  color:#aaa;
   font-size:13px;
-  opacity:.85;
+}
+#ui{
+  position:fixed;
+  top:15px;
+  right:15px;
+  color:white;
+  font-size:14px;
+}
+button{
+  background:#00ffd5;
+  border:none;
+  padding:6px 12px;
+  border-radius:20px;
+  cursor:pointer;
 }
 </style>
 </head>
 
 <body>
 
-<div id="ui">Score: <span id="score">0</span></div>
-<div id="sound">🔊</div>
-<div id="credit">Game developed by @ <b>SnowMan YT</b></div>
-
 <canvas id="game"></canvas>
 
+<div id="ui">
+  <button onclick="toggleSound()">🔊 Sound</button>
+</div>
+
+<div id="footer">Game developed by @ SnowMan YT</div>
+
+<audio id="bgm" loop>
+  <source src="https://cdn.pixabay.com/audio/2022/03/15/audio_2e4a89d5c3.mp3">
+</audio>
+
 <script>
-const canvas=document.getElementById("game");
-const ctx=canvas.getContext("2d");
-const scoreEl=document.getElementById("score");
-const soundBtn=document.getElementById("sound");
+const canvas = document.getElementById("game");
+const ctx = canvas.getContext("2d");
+resize();
+window.addEventListener("resize", resize);
 
 function resize(){
-  canvas.width=innerWidth;
-  canvas.height=innerHeight;
+  canvas.width = innerWidth;
+  canvas.height = innerHeight;
 }
-addEventListener("resize",resize);
-resize();
 
-const CELL=18;
-let COLS=canvas.width/CELL;
-let ROWS=canvas.height/CELL;
+const CELL = 14;
+let snake = [];
+let dir = {x:1,y:0};
+let speed = 2.5;
+let food = {};
+let bossFood = null;
+let foodCount = 0;
+let bossTimer = 0;
+let soundOn = true;
 
-let snake=[],dir={x:1,y:0},nextDir={x:1,y:0};
-let food={},bossFood=null,particles=[];
-let score=0,eatCount=0,speed=6;
-let soundOn=true;
+const bgm = document.getElementById("bgm");
+bgm.volume = 0.4;
+bgm.play();
 
-/* AUDIO */
-const eatSound=new Audio("https://assets.mixkit.co/sfx/preview/mixkit-arcade-game-jump-coin-216.wav");
-const bgMusic=new Audio("https://assets.mixkit.co/music/preview/mixkit-retro-game-emergency-alarm-1000.mp3");
-bgMusic.loop=true; bgMusic.volume=.35;
+function toggleSound(){
+  soundOn = !soundOn;
+  soundOn ? bgm.play() : bgm.pause();
+}
 
-soundBtn.onclick=()=>{
-  soundOn=!soundOn;
-  soundBtn.textContent=soundOn?"🔊":"🔇";
-  soundOn?bgMusic.play():bgMusic.pause();
-};
-const playEat=()=>soundOn&&eatSound.play();
+// INIT SNAKE
+for(let i=0;i<20;i++){
+  snake.push({x:canvas.width/2 - i*CELL,y:canvas.height/2});
+}
 
-/* SPAWN */
-const rand=()=>Math.random();
+spawnFood();
+
 function spawnFood(){
-  food={x:rand()*COLS,y:rand()*ROWS,pulse:0};
-}
-function spawnBossFood(){
-  bossFood={
-    x:rand()*COLS,
-    y:rand()*ROWS,
-    time:6, // seconds
-    pulse:0
+  food = {
+    x: Math.random()*canvas.width,
+    y: Math.random()*canvas.height
   };
 }
 
-/* RESET */
-function reset(){
-  snake=[{x:COLS/2,y:ROWS/2}];
-  dir=nextDir={x:1,y:0};
-  spawnFood(); bossFood=null;
-  score=0; eatCount=0;
-  scoreEl.textContent=0;
+function spawnBossFood(){
+  bossFood = {
+    x: Math.random()*canvas.width,
+    y: Math.random()*canvas.height
+  };
+  bossTimer = 300;
 }
-reset();
 
-/* INPUT */
-function setDir(x,y){
-  if(dir.x+x===0&&dir.y+y===0)return;
-  nextDir={x,y};
-}
-addEventListener("keydown",e=>{
-  if(e.key==="ArrowUp")setDir(0,-1);
-  if(e.key==="ArrowDown")setDir(0,1);
-  if(e.key==="ArrowLeft")setDir(-1,0);
-  if(e.key==="ArrowRight")setDir(1,0);
-});
-let sx=0,sy=0;
-addEventListener("touchstart",e=>{
-  sx=e.touches[0].clientX; sy=e.touches[0].clientY;
-  if(soundOn) bgMusic.play();
-});
-addEventListener("touchend",e=>{
-  let dx=e.changedTouches[0].clientX-sx;
-  let dy=e.changedTouches[0].clientY-sy;
-  Math.abs(dx)>Math.abs(dy)?setDir(dx>0?1:-1,0):setDir(0,dy>0?1:-1);
+document.addEventListener("keydown",e=>{
+  if(e.key==="ArrowUp") dir={x:0,y:-1};
+  if(e.key==="ArrowDown") dir={x:0,y:1};
+  if(e.key==="ArrowLeft") dir={x:-1,y:0};
+  if(e.key==="ArrowRight") dir={x:1,y:0};
 });
 
-/* PARTICLES */
-function spawnParticles(x,y,n,c){
-  for(let i=0;i<n;i++){
-    particles.push({
-      x,y,
-      vx:(rand()-.5)*5,
-      vy:(rand()-.5)*5,
-      life:1,
-      color:c
-    });
+let touchStart=null;
+canvas.addEventListener("touchstart",e=>{
+  touchStart=e.touches[0];
+});
+canvas.addEventListener("touchend",e=>{
+  const t=e.changedTouches[0];
+  const dx=t.clientX-touchStart.clientX;
+  const dy=t.clientY-touchStart.clientY;
+  if(Math.abs(dx)>Math.abs(dy)){
+    dir=dx>0?{x:1,y:0}:{x:-1,y:0};
+  }else{
+    dir=dy>0?{x:0,y:1}:{x:0,y:-1};
+  }
+});
+
+function update(){
+  const head = {...snake[0]};
+  head.x += dir.x * speed;
+  head.y += dir.y * speed;
+
+  // WRAP SCREEN
+  if(head.x<0) head.x=canvas.width;
+  if(head.y<0) head.y=canvas.height;
+  if(head.x>canvas.width) head.x=0;
+  if(head.y>canvas.height) head.y=0;
+
+  snake.unshift(head);
+  snake.pop();
+
+  // FOOD COLLISION
+  if(Math.hypot(head.x-food.x, head.y-food.y)<20){
+    snake.push({...snake[snake.length-1]});
+    spawnFood();
+    foodCount++;
+    if(foodCount%5===0) spawnBossFood();
+  }
+
+  // BOSS FOOD
+  if(bossFood){
+    bossTimer--;
+    if(Math.hypot(head.x-bossFood.x, head.y-bossFood.y)<25){
+      for(let i=0;i<5;i++) snake.push({...snake[snake.length-1]});
+      bossFood=null;
+    }
+    if(bossTimer<=0) bossFood=null;
   }
 }
 
-/* LOOP */
-let last=0;
-function loop(t){
-  if(!last)last=t;
-  const dt=(t-last)/1000;
-  last=t;
-  update(dt);
+function drawSnake(){
+  ctx.lineJoin="round";
+  ctx.lineCap="round";
+  ctx.beginPath();
+  ctx.moveTo(snake[0].x, snake[0].y);
+
+  for(let i=1;i<snake.length;i++){
+    const p=snake[i];
+    ctx.lineTo(p.x,p.y);
+  }
+
+  const grad=ctx.createLinearGradient(
+    snake[0].x,snake[0].y,
+    snake[snake.length-1].x,snake[snake.length-1].y
+  );
+  grad.addColorStop(0,"#00ffd5");
+  grad.addColorStop(1,"#0066ff");
+  ctx.strokeStyle=grad;
+  ctx.lineWidth=18;
+  ctx.stroke();
+
+  // HEAD
+  const h=snake[0];
+  ctx.beginPath();
+  ctx.fillStyle="#00ffe1";
+  ctx.arc(h.x,h.y,14,0,Math.PI*2);
+  ctx.fill();
+
+  // EYES
+  const a=Math.atan2(dir.y,dir.x);
+  for(let s of [-1,1]){
+    ctx.beginPath();
+    ctx.fillStyle="#fff";
+    ctx.arc(
+      h.x+Math.cos(a+0.4*s)*6,
+      h.y+Math.sin(a+0.4*s)*6,
+      3,0,Math.PI*2
+    );
+    ctx.fill();
+  }
+}
+
+function draw(){
+  ctx.clearRect(0,0,canvas.width,canvas.height);
+
+  // FOOD
+  ctx.beginPath();
+  ctx.fillStyle="#ff4757";
+  ctx.shadowBlur=15;
+  ctx.shadowColor="#ff4757";
+  ctx.arc(food.x,food.y,8,0,Math.PI*2);
+  ctx.fill();
+  ctx.shadowBlur=0;
+
+  // BOSS FOOD
+  if(bossFood){
+    ctx.beginPath();
+    ctx.fillStyle="#ffd700";
+    ctx.shadowBlur=20;
+    ctx.shadowColor="#ffd700";
+    ctx.arc(bossFood.x,bossFood.y,14,0,Math.PI*2);
+    ctx.fill();
+
+    ctx.fillStyle="#fff";
+    ctx.font="14px monospace";
+    ctx.fillText(Math.ceil(bossTimer/60),bossFood.x-5,bossFood.y-20);
+    ctx.shadowBlur=0;
+  }
+
+  drawSnake();
+}
+
+function loop(){
+  update();
   draw();
   requestAnimationFrame(loop);
 }
-requestAnimationFrame(loop);
 
-/* UPDATE */
-function update(dt){
-  dir=nextDir;
-  const h={...snake[0]};
-  h.x+=dir.x*speed*dt;
-  h.y+=dir.y*speed*dt;
-
-  if(h.x<0)h.x+=COLS;
-  if(h.y<0)h.y+=ROWS;
-  if(h.x>=COLS)h.x-=COLS;
-  if(h.y>=ROWS)h.y-=ROWS;
-
-  snake.unshift(h);
-
-  /* NORMAL FOOD */
-  if(Math.hypot(h.x-food.x,h.y-food.y)<0.6){
-    score++; eatCount++;
-    scoreEl.textContent=score;
-    playEat();
-    spawnParticles(food.x*CELL,food.y*CELL,12,"#ff2d55");
-    spawnFood();
-    if(eatCount%5===0)spawnBossFood();
-  } else snake.pop();
-
-  /* BOSS FOOD */
-  if(bossFood){
-    bossFood.time-=dt;
-    bossFood.pulse+=dt*4;
-    if(Math.hypot(h.x-bossFood.x,h.y-bossFood.y)<0.9){
-      score+=5;
-      scoreEl.textContent=score;
-      spawnParticles(bossFood.x*CELL,bossFood.y*CELL,30,"#ffd700");
-      bossFood=null;
-    }
-    if(bossFood && bossFood.time<=0) bossFood=null;
-  }
-
-  particles.forEach(p=>{
-    p.x+=p.vx; p.y+=p.vy; p.life-=dt;
-  });
-  particles=particles.filter(p=>p.life>0);
-
-  food.pulse+=dt*4;
-}
-
-/* DRAW */
-function draw(){
-  ctx.fillStyle="#050b1f";
-  ctx.fillRect(0,0,canvas.width,canvas.height);
-
-  /* FOOD */
-  const fp=Math.sin(food.pulse)*3+CELL/2;
-  ctx.fillStyle="#ff2d55";
-  ctx.beginPath();
-  ctx.arc(food.x*CELL,food.y*CELL,(CELL+fp)/2,0,Math.PI*2);
-  ctx.fill();
-
-  /* BOSS FOOD + TIMER */
-  if(bossFood){
-    const bp=Math.sin(bossFood.pulse)*6+CELL;
-    ctx.fillStyle="#ffd700";
-    ctx.shadowBlur=25;
-    ctx.beginPath();
-    ctx.arc(bossFood.x*CELL,bossFood.y*CELL,bp,0,Math.PI*2);
-    ctx.fill();
-    ctx.shadowBlur=0;
-
-    // DIGITAL TIMER
-    const t=Math.max(0,bossFood.time);
-    const sec=Math.floor(t);
-    const text=`00:${sec.toString().padStart(2,"0")}`;
-    ctx.font="bold 14px monospace";
-    ctx.textAlign="center";
-    ctx.fillStyle=sec<=2?"#ff3333":"#ffffff";
-    ctx.fillText(text,bossFood.x*CELL,bossFood.y*CELL-bp-8);
-  }
-
-  /* PARTICLES */
-  particles.forEach(p=>{
-    ctx.fillStyle=`rgba(255,200,100,${p.life})`;
-    ctx.fillRect(p.x,p.y,4,4);
-  });
-
-  /* BODY */
-  ctx.lineWidth=CELL;
-  ctx.lineCap="round";
-  ctx.strokeStyle="#6fff9f";
-  ctx.beginPath();
-  snake.forEach((s,i)=>{
-    const x=s.x*CELL,y=s.y*CELL;
-    i===0?ctx.moveTo(x,y):ctx.lineTo(x,y);
-  });
-  ctx.stroke();
-
-  /* HEAD + EYES */
-  const h=snake[0];
-  const hx=h.x*CELL,hy=h.y*CELL;
-  ctx.fillStyle="#00eaff";
-  ctx.beginPath();
-  ctx.arc(hx,hy,CELL/1.7,0,Math.PI*2);
-  ctx.fill();
-
-  const ex=dir.x*6,ey=dir.y*6;
-  ctx.fillStyle="#fff";
-  ctx.beginPath();
-  ctx.arc(hx+ex-ey/2,hy+ey+ex/2,3,0,Math.PI*2);
-  ctx.arc(hx+ex+ey/2,hy+ey-ex/2,3,0,Math.PI*2);
-  ctx.fill();
-}
+loop();
 </script>
 
 </body>
