@@ -3,213 +3,213 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Smart Snake | SnowMan YT</title>
+<title>Snake Game | SnowMan YT</title>
 
 <style>
-body{
+html,body{
   margin:0;
-  background:linear-gradient(135deg,#1a2a6c,#b21f1f,#fdbb2d);
+  width:100%;
+  height:100%;
+  background:#050b1f;
+  overflow:hidden;
   font-family:system-ui;
-  display:flex;
-  justify-content:center;
-  align-items:center;
-  min-height:100vh;
 }
-.game{
-  background:#0b1020;
-  border-radius:20px;
-  padding:16px;
-  width:330px;
-  box-shadow:0 0 40px rgba(0,0,0,.6);
-}
-.top{
-  display:flex;
-  justify-content:space-between;
-  align-items:center;
-  color:#fff;
+canvas{display:block}
+#ui{
+  position:fixed;
+  top:10px;
+  left:50%;
+  transform:translateX(-50%);
+  color:#00eaff;
   font-weight:bold;
-  margin-bottom:8px;
-}
-canvas{
-  background:radial-gradient(circle,#050b1f,#000);
-  border-radius:16px;
-  display:block;
-  margin:auto;
-  border:2px solid #00eaff;
-}
-.controls{
-  display:grid;
-  grid-template-columns:70px 70px 70px;
-  gap:8px;
-  justify-content:center;
-  margin-top:12px;
-}
-.controls button,
-.full{
-  background:linear-gradient(135deg,#00eaff,#6fff9f);
-  border:none;
-  border-radius:12px;
   font-size:18px;
-  padding:12px;
+}
+#sound{
+  position:fixed;
+  top:10px;
+  right:15px;
+  font-size:22px;
+  color:#00eaff;
   cursor:pointer;
 }
-.controls button:active,
-.full:active{transform:scale(.92);}
-.credit{
-  text-align:center;
-  font-size:12px;
-  margin-top:8px;
-  color:#cfffff;
+
+/* 👇 CREDIT */
+#credit{
+  position:fixed;
+  bottom:10px;
+  left:50%;
+  transform:translateX(-50%);
+  color:#6ff;
+  font-size:13px;
+  opacity:0.8;
+  letter-spacing:0.5px;
 }
 </style>
 </head>
 
 <body>
 
-<div class="game" id="gameBox">
-  <div class="top">
-    <div>Score: <span id="score">0</span></div>
-    <button class="full" onclick="fullscreen()">⛶</button>
-  </div>
+<div id="ui">Score: <span id="score">0</span></div>
+<div id="sound">🔊</div>
+<div id="credit"> Game developed by @ <b>SnowMan YT</b></div>
 
-  <canvas id="game" width="280" height="280"></canvas>
-
-  <div class="controls">
-    <div></div>
-    <button onclick="setDir(0,-1)">⬆</button>
-    <div></div>
-    <button onclick="setDir(-1,0)">⬅</button>
-    <button onclick="reset()">⟳</button>
-    <button onclick="setDir(1,0)">➡</button>
-    <div></div>
-    <button onclick="setDir(0,1)">⬇</button>
-    <div></div>
-  </div>
-
-  <div class="credit">Game developed by @SnowMan YT</div>
-</div>
+<canvas id="game"></canvas>
 
 <script>
 const canvas=document.getElementById("game");
 const ctx=canvas.getContext("2d");
-
-const GRID=20, SIZE=14, SPEED=6;
-let snake,food,dir,nextDir,score;
-let last=0,acc=0;
-
 const scoreEl=document.getElementById("score");
+const soundBtn=document.getElementById("sound");
 
-// SOUND
-const audio=new (window.AudioContext||window.webkitAudioContext)();
-function beep(f,d){
-  const o=audio.createOscillator(),g=audio.createGain();
-  o.frequency.value=f;
-  o.connect(g); g.connect(audio.destination);
-  o.start();
-  g.gain.exponentialRampToValueAtTime(.001,audio.currentTime+d);
-  o.stop(audio.currentTime+d);
+function resize(){
+  canvas.width=innerWidth;
+  canvas.height=innerHeight;
 }
+addEventListener("resize",resize);
+resize();
 
-function reset(){
-  snake=[{x:10,y:10},{x:9,y:10},{x:8,y:10}];
-  dir={x:1,y:0}; nextDir={x:1,y:0};
-  food=spawn();
-  score=0;
-  scoreEl.textContent=0;
+const SIZE=20;
+let COLS,ROWS;
+function grid(){
+  COLS=Math.floor(canvas.width/SIZE);
+  ROWS=Math.floor(canvas.height/SIZE);
+}
+grid();
+
+let snake,food,power,dir,nextDir,score,speed,shield;
+let soundOn=true;
+
+/* 🔊 SOUNDS */
+const sounds={
+  eat:new Audio("https://assets.mixkit.co/sfx/preview/mixkit-arcade-game-jump-coin-216.wav"),
+  power:new Audio("https://assets.mixkit.co/sfx/preview/mixkit-video-game-mystery-alert-234.wav"),
+  dead:new Audio("https://assets.mixkit.co/sfx/preview/mixkit-player-losing-or-failing-2042.wav")
+};
+
+/* 🎵 BACKGROUND MUSIC */
+const bgMusic=new Audio("https://assets.mixkit.co/music/preview/mixkit-retro-game-emergency-alarm-1000.mp3");
+bgMusic.loop=true;
+bgMusic.volume=0.35;
+
+soundBtn.onclick=()=>{
+  soundOn=!soundOn;
+  soundBtn.textContent=soundOn?"🔊":"🔇";
+  soundOn?bgMusic.play():bgMusic.pause();
+};
+
+function play(s){
+  if(soundOn) sounds[s].play();
 }
 
 function spawn(){
-  return {x:Math.floor(Math.random()*GRID),y:Math.floor(Math.random()*GRID)};
+  return {x:Math.random()*COLS|0,y:Math.random()*ROWS|0};
+}
+
+function reset(){
+  grid();
+  snake=[{x:COLS/2|0,y:ROWS/2|0}];
+  dir=nextDir={x:1,y:0};
+  food=spawn();
+  power=null;
+  score=0;
+  speed=10;
+  shield=false;
+  scoreEl.textContent=0;
+}
+
+function spawnPower(){
+  const types=["speed","shield","bonus"];
+  power={...spawn(),type:types[Math.random()*3|0],timer:300};
 }
 
 function setDir(x,y){
-  if(dir.x+x===0 && dir.y+y===0) return;
+  if(dir.x+x===0&&dir.y+y===0)return;
   nextDir={x,y};
-  beep(500,.02);
 }
 
-document.addEventListener("keydown",e=>{
+addEventListener("keydown",e=>{
   if(e.key==="ArrowUp")setDir(0,-1);
   if(e.key==="ArrowDown")setDir(0,1);
   if(e.key==="ArrowLeft")setDir(-1,0);
   if(e.key==="ArrowRight")setDir(1,0);
 });
 
+let sx=0,sy=0;
+addEventListener("touchstart",e=>{
+  sx=e.touches[0].clientX;
+  sy=e.touches[0].clientY;
+  if(soundOn) bgMusic.play();
+});
+addEventListener("touchend",e=>{
+  let dx=e.changedTouches[0].clientX-sx;
+  let dy=e.changedTouches[0].clientY-sy;
+  Math.abs(dx)>Math.abs(dy)?setDir(dx>0?1:-1,0):setDir(0,dy>0?1:-1);
+});
+
+let last=0,acc=0;
 function update(){
   dir=nextDir;
-  const h={x:snake[0].x+dir.x,y:snake[0].y+dir.y};
+  let h={x:snake[0].x+dir.x,y:snake[0].y+dir.y};
 
-  if(
-    h.x<0||h.y<0||h.x>=GRID||h.y>=GRID||
-    snake.some(s=>s.x===h.x&&s.y===h.y)
-  ){
-    beep(120,.4);
-    alert("Game Over! Score: "+score);
-    reset(); return;
+  if(h.x<0)h.x=COLS-1;
+  if(h.x>=COLS)h.x=0;
+  if(h.y<0)h.y=ROWS-1;
+  if(h.y>=ROWS)h.y=0;
+
+  if(snake.some(s=>s.x===h.x&&s.y===h.y)){
+    if(shield){shield=false;return;}
+    play("dead");reset();return;
   }
 
   snake.unshift(h);
 
   if(h.x===food.x&&h.y===food.y){
-    score++; scoreEl.textContent=score;
-    food=spawn(); beep(900,.08);
+    score++;scoreEl.textContent=score;
+    play("eat");
+    food=spawn();
+    if(Math.random()<0.3)spawnPower();
   }else snake.pop();
+
+  if(power){
+    power.timer--;
+    if(h.x===power.x&&h.y===power.y){
+      play("power");
+      if(power.type==="speed")speed=18;
+      if(power.type==="shield")shield=true;
+      if(power.type==="bonus"){score+=5;scoreEl.textContent=score;}
+      power=null;
+    }
+    if(power&&power.timer<=0)power=null;
+  }
 }
 
-function draw(alpha){
-  ctx.clearRect(0,0,canvas.width,canvas.height);
+function draw(){
+  ctx.fillStyle="#050b1f";
+  ctx.fillRect(0,0,canvas.width,canvas.height);
 
-  // FOOD
-  ctx.fillStyle="hsl(0,100%,60%)";
+  ctx.fillStyle="#ff2d55";
   ctx.shadowBlur=15;
-  ctx.shadowColor="#ff2d55";
   ctx.fillRect(food.x*SIZE,food.y*SIZE,SIZE,SIZE);
 
-  // SNAKE BODY
-  ctx.shadowBlur=12;
+  if(power){
+    ctx.fillStyle=power.type==="speed"?"#00eaff":power.type==="shield"?"#ffd700":"#6fff9f";
+    ctx.fillRect(power.x*SIZE,power.y*SIZE,SIZE,SIZE);
+  }
+
   snake.forEach((p,i)=>{
-    ctx.fillStyle=i==0?"#00eaff":`hsl(${120+i*5},80%,55%)`;
-    let x=p.x,y=p.y;
-    if(i==0){
-      x-=dir.x*(1-alpha);
-      y-=dir.y*(1-alpha);
-    }
-    ctx.fillRect(x*SIZE,y*SIZE,SIZE,SIZE);
+    ctx.fillStyle=i===0?"#00eaff":shield?"#ffd700":"#6fff9f";
+    ctx.fillRect(p.x*SIZE,p.y*SIZE,SIZE,SIZE);
   });
-
-  // HEAD ROTATION (EYES)
-  const head=snake[0];
-  const cx=(head.x+0.5)*SIZE;
-  const cy=(head.y+0.5)*SIZE;
-  ctx.save();
-  ctx.translate(cx,cy);
-  ctx.rotate(Math.atan2(dir.y,dir.x));
-  ctx.fillStyle="#000";
-  ctx.beginPath();
-  ctx.arc(3,-3,2,0,Math.PI*2);
-  ctx.arc(3,3,2,0,Math.PI*2);
-  ctx.fill();
-  ctx.restore();
-
   ctx.shadowBlur=0;
 }
 
 function loop(t){
-  if(!last) last=t;
+  if(!last)last=t;
   acc+=(t-last)/1000;
   last=t;
-
-  while(acc>1/SPEED){
-    update();
-    acc-=1/SPEED;
-  }
-  draw(acc*SPEED);
+  while(acc>1/speed){update();acc-=1/speed;}
+  draw();
   requestAnimationFrame(loop);
-}
-
-function fullscreen(){
-  const g=document.getElementById("gameBox");
-  if(g.requestFullscreen) g.requestFullscreen();
 }
 
 reset();
