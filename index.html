@@ -15,6 +15,7 @@ html,body{
   font-family:system-ui;
 }
 canvas{display:block}
+
 #ui{
   position:fixed;
   top:10px;
@@ -29,11 +30,9 @@ canvas{display:block}
   top:10px;
   right:15px;
   font-size:22px;
-  color:#00eaff;
   cursor:pointer;
+  color:#00eaff;
 }
-
-/* 👇 CREDIT */
 #credit{
   position:fixed;
   bottom:10px;
@@ -41,8 +40,7 @@ canvas{display:block}
   transform:translateX(-50%);
   color:#6ff;
   font-size:13px;
-  opacity:0.8;
-  letter-spacing:0.5px;
+  opacity:.85;
 }
 </style>
 </head>
@@ -51,7 +49,7 @@ canvas{display:block}
 
 <div id="ui">Score: <span id="score">0</span></div>
 <div id="sound">🔊</div>
-<div id="credit"> Game developed by @ <b>SnowMan YT</b></div>
+<div id="credit">Game developed by @ <b>SnowMan YT</b></div>
 
 <canvas id="game"></canvas>
 
@@ -68,76 +66,65 @@ function resize(){
 addEventListener("resize",resize);
 resize();
 
-const SIZE=20;
-let COLS,ROWS;
-function grid(){
-  COLS=Math.floor(canvas.width/SIZE);
-  ROWS=Math.floor(canvas.height/SIZE);
-}
-grid();
+const CELL=18;
+let COLS=canvas.width/CELL;
+let ROWS=canvas.height/CELL;
 
-let snake,food,power,dir,nextDir,score,speed,shield;
+let snake=[],dir={x:1,y:0},nextDir={x:1,y:0};
+let food={},bossFood=null,particles=[];
+let score=0,eatCount=0,speed=6;
 let soundOn=true;
 
-/* 🔊 SOUNDS */
-const sounds={
-  eat:new Audio("https://assets.mixkit.co/sfx/preview/mixkit-arcade-game-jump-coin-216.wav"),
-  power:new Audio("https://assets.mixkit.co/sfx/preview/mixkit-video-game-mystery-alert-234.wav"),
-  dead:new Audio("https://assets.mixkit.co/sfx/preview/mixkit-player-losing-or-failing-2042.wav")
-};
-
-/* 🎵 BACKGROUND MUSIC */
+/* AUDIO */
+const eatSound=new Audio("https://assets.mixkit.co/sfx/preview/mixkit-arcade-game-jump-coin-216.wav");
 const bgMusic=new Audio("https://assets.mixkit.co/music/preview/mixkit-retro-game-emergency-alarm-1000.mp3");
-bgMusic.loop=true;
-bgMusic.volume=0.35;
+bgMusic.loop=true; bgMusic.volume=.35;
 
 soundBtn.onclick=()=>{
   soundOn=!soundOn;
   soundBtn.textContent=soundOn?"🔊":"🔇";
   soundOn?bgMusic.play():bgMusic.pause();
 };
+const playEat=()=>soundOn&&eatSound.play();
 
-function play(s){
-  if(soundOn) sounds[s].play();
+/* SPAWN */
+const rand=()=>Math.random();
+function spawnFood(){
+  food={x:rand()*COLS,y:rand()*ROWS,pulse:0};
+}
+function spawnBossFood(){
+  bossFood={
+    x:rand()*COLS,
+    y:rand()*ROWS,
+    time:6, // seconds
+    pulse:0
+  };
 }
 
-function spawn(){
-  return {x:Math.random()*COLS|0,y:Math.random()*ROWS|0};
-}
-
+/* RESET */
 function reset(){
-  grid();
-  snake=[{x:COLS/2|0,y:ROWS/2|0}];
+  snake=[{x:COLS/2,y:ROWS/2}];
   dir=nextDir={x:1,y:0};
-  food=spawn();
-  power=null;
-  score=0;
-  speed=10;
-  shield=false;
+  spawnFood(); bossFood=null;
+  score=0; eatCount=0;
   scoreEl.textContent=0;
 }
+reset();
 
-function spawnPower(){
-  const types=["speed","shield","bonus"];
-  power={...spawn(),type:types[Math.random()*3|0],timer:300};
-}
-
+/* INPUT */
 function setDir(x,y){
   if(dir.x+x===0&&dir.y+y===0)return;
   nextDir={x,y};
 }
-
 addEventListener("keydown",e=>{
   if(e.key==="ArrowUp")setDir(0,-1);
   if(e.key==="ArrowDown")setDir(0,1);
   if(e.key==="ArrowLeft")setDir(-1,0);
   if(e.key==="ArrowRight")setDir(1,0);
 });
-
 let sx=0,sy=0;
 addEventListener("touchstart",e=>{
-  sx=e.touches[0].clientX;
-  sy=e.touches[0].clientY;
+  sx=e.touches[0].clientX; sy=e.touches[0].clientY;
   if(soundOn) bgMusic.play();
 });
 addEventListener("touchend",e=>{
@@ -146,74 +133,140 @@ addEventListener("touchend",e=>{
   Math.abs(dx)>Math.abs(dy)?setDir(dx>0?1:-1,0):setDir(0,dy>0?1:-1);
 });
 
-let last=0,acc=0;
-function update(){
-  dir=nextDir;
-  let h={x:snake[0].x+dir.x,y:snake[0].y+dir.y};
-
-  if(h.x<0)h.x=COLS-1;
-  if(h.x>=COLS)h.x=0;
-  if(h.y<0)h.y=ROWS-1;
-  if(h.y>=ROWS)h.y=0;
-
-  if(snake.some(s=>s.x===h.x&&s.y===h.y)){
-    if(shield){shield=false;return;}
-    play("dead");reset();return;
-  }
-
-  snake.unshift(h);
-
-  if(h.x===food.x&&h.y===food.y){
-    score++;scoreEl.textContent=score;
-    play("eat");
-    food=spawn();
-    if(Math.random()<0.3)spawnPower();
-  }else snake.pop();
-
-  if(power){
-    power.timer--;
-    if(h.x===power.x&&h.y===power.y){
-      play("power");
-      if(power.type==="speed")speed=18;
-      if(power.type==="shield")shield=true;
-      if(power.type==="bonus"){score+=5;scoreEl.textContent=score;}
-      power=null;
-    }
-    if(power&&power.timer<=0)power=null;
+/* PARTICLES */
+function spawnParticles(x,y,n,c){
+  for(let i=0;i<n;i++){
+    particles.push({
+      x,y,
+      vx:(rand()-.5)*5,
+      vy:(rand()-.5)*5,
+      life:1,
+      color:c
+    });
   }
 }
 
+/* LOOP */
+let last=0;
+function loop(t){
+  if(!last)last=t;
+  const dt=(t-last)/1000;
+  last=t;
+  update(dt);
+  draw();
+  requestAnimationFrame(loop);
+}
+requestAnimationFrame(loop);
+
+/* UPDATE */
+function update(dt){
+  dir=nextDir;
+  const h={...snake[0]};
+  h.x+=dir.x*speed*dt;
+  h.y+=dir.y*speed*dt;
+
+  if(h.x<0)h.x+=COLS;
+  if(h.y<0)h.y+=ROWS;
+  if(h.x>=COLS)h.x-=COLS;
+  if(h.y>=ROWS)h.y-=ROWS;
+
+  snake.unshift(h);
+
+  /* NORMAL FOOD */
+  if(Math.hypot(h.x-food.x,h.y-food.y)<0.6){
+    score++; eatCount++;
+    scoreEl.textContent=score;
+    playEat();
+    spawnParticles(food.x*CELL,food.y*CELL,12,"#ff2d55");
+    spawnFood();
+    if(eatCount%5===0)spawnBossFood();
+  } else snake.pop();
+
+  /* BOSS FOOD */
+  if(bossFood){
+    bossFood.time-=dt;
+    bossFood.pulse+=dt*4;
+    if(Math.hypot(h.x-bossFood.x,h.y-bossFood.y)<0.9){
+      score+=5;
+      scoreEl.textContent=score;
+      spawnParticles(bossFood.x*CELL,bossFood.y*CELL,30,"#ffd700");
+      bossFood=null;
+    }
+    if(bossFood && bossFood.time<=0) bossFood=null;
+  }
+
+  particles.forEach(p=>{
+    p.x+=p.vx; p.y+=p.vy; p.life-=dt;
+  });
+  particles=particles.filter(p=>p.life>0);
+
+  food.pulse+=dt*4;
+}
+
+/* DRAW */
 function draw(){
   ctx.fillStyle="#050b1f";
   ctx.fillRect(0,0,canvas.width,canvas.height);
 
+  /* FOOD */
+  const fp=Math.sin(food.pulse)*3+CELL/2;
   ctx.fillStyle="#ff2d55";
-  ctx.shadowBlur=15;
-  ctx.fillRect(food.x*SIZE,food.y*SIZE,SIZE,SIZE);
+  ctx.beginPath();
+  ctx.arc(food.x*CELL,food.y*CELL,(CELL+fp)/2,0,Math.PI*2);
+  ctx.fill();
 
-  if(power){
-    ctx.fillStyle=power.type==="speed"?"#00eaff":power.type==="shield"?"#ffd700":"#6fff9f";
-    ctx.fillRect(power.x*SIZE,power.y*SIZE,SIZE,SIZE);
+  /* BOSS FOOD + TIMER */
+  if(bossFood){
+    const bp=Math.sin(bossFood.pulse)*6+CELL;
+    ctx.fillStyle="#ffd700";
+    ctx.shadowBlur=25;
+    ctx.beginPath();
+    ctx.arc(bossFood.x*CELL,bossFood.y*CELL,bp,0,Math.PI*2);
+    ctx.fill();
+    ctx.shadowBlur=0;
+
+    // DIGITAL TIMER
+    const t=Math.max(0,bossFood.time);
+    const sec=Math.floor(t);
+    const text=`00:${sec.toString().padStart(2,"0")}`;
+    ctx.font="bold 14px monospace";
+    ctx.textAlign="center";
+    ctx.fillStyle=sec<=2?"#ff3333":"#ffffff";
+    ctx.fillText(text,bossFood.x*CELL,bossFood.y*CELL-bp-8);
   }
 
-  snake.forEach((p,i)=>{
-    ctx.fillStyle=i===0?"#00eaff":shield?"#ffd700":"#6fff9f";
-    ctx.fillRect(p.x*SIZE,p.y*SIZE,SIZE,SIZE);
+  /* PARTICLES */
+  particles.forEach(p=>{
+    ctx.fillStyle=`rgba(255,200,100,${p.life})`;
+    ctx.fillRect(p.x,p.y,4,4);
   });
-  ctx.shadowBlur=0;
-}
 
-function loop(t){
-  if(!last)last=t;
-  acc+=(t-last)/1000;
-  last=t;
-  while(acc>1/speed){update();acc-=1/speed;}
-  draw();
-  requestAnimationFrame(loop);
-}
+  /* BODY */
+  ctx.lineWidth=CELL;
+  ctx.lineCap="round";
+  ctx.strokeStyle="#6fff9f";
+  ctx.beginPath();
+  snake.forEach((s,i)=>{
+    const x=s.x*CELL,y=s.y*CELL;
+    i===0?ctx.moveTo(x,y):ctx.lineTo(x,y);
+  });
+  ctx.stroke();
 
-reset();
-requestAnimationFrame(loop);
+  /* HEAD + EYES */
+  const h=snake[0];
+  const hx=h.x*CELL,hy=h.y*CELL;
+  ctx.fillStyle="#00eaff";
+  ctx.beginPath();
+  ctx.arc(hx,hy,CELL/1.7,0,Math.PI*2);
+  ctx.fill();
+
+  const ex=dir.x*6,ey=dir.y*6;
+  ctx.fillStyle="#fff";
+  ctx.beginPath();
+  ctx.arc(hx+ex-ey/2,hy+ey+ex/2,3,0,Math.PI*2);
+  ctx.arc(hx+ex+ey/2,hy+ey-ex/2,3,0,Math.PI*2);
+  ctx.fill();
+}
 </script>
 
 </body>
